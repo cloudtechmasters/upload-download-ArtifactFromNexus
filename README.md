@@ -1,52 +1,71 @@
 # spring-boot-hello
 
-Pre-requisites:
------
-  - Install Java
-  - Install GIT
-  - Install Maven
-  - Install Docker
-  - Install Jenkins
-  - Create ECR Repo with the name of "hellospringboot"
-  - Create a policy for ECS full Access with name of "AmazonECSFullAccess"
-  - Create IAM Role with the name of "ecrFullAccess-ecsTaskExecutionRole" also add below policies
-      * AmazonEC2ContainerRegistryFullAccess
-      * AmazonECSTaskExecutionRolePolicy
-      * AmazonECSFullAccess
-  
-Create Maven Job:
--------
-1)  SCM: 
---------
+## Pre-requisites:
+    - Install Java
+    - Install Git
+    - Install Maven
+    - Install Nexus
+## Install Java:
+    yum install java-1.8.0-openjdk-devel -y
+## Install Git:
+    yum install git -y
+## Install Apache-Maven:
+    wget https://mirrors.estointernet.in/apache/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz
+    tar xvzf apache-maven-3.6.3-bin.tar.gz
+
+    vi /etc/profile.d/maven.sh
+    --------------------------------------------
+    export MAVEN_HOME=/opt/apache-maven-3.6.3
+    export PATH=$PATH:$MAVEN_HOME/bin
+    --------------------------------------------
+
+    source /etc/profile.d/maven.sh
+    mvn -version
+## Steps to push artifacts to nexus:
+1. We need to modify with nexus url inside pom.xml
+    Inside url we need to replace repository name 
     
-    https://github.com/VamsiTechTuts/spring-boot-hello.git
-2)  Maven:
-----------
+        <distributionManagement>
+            <snapshotRepository>
+                <id>nexus-snapshots</id>
+                <url>http://100.26.240.37:8081/repository/maven-snapshots/</url>
+            </snapshotRepository>
+            <repository>
+                <id>nexus-releases</id>
+                <url>http://100.26.240.37:8081/repository/maven-releases/</url>
+            </repository>
+        </distributionManagement>
+2. The credentials of the server have to be defined in the global Maven setting.xml:
 
-    Give name for Maven and also give "clean install"
-
-3) Push image to ECR:
----------------------
-
-    #!/usr/bin/env bash
-    export AWS_DEFAULT_REGION=us-west-2
-    $(aws ecr get-login --no-include-email --region us-west-2)
-    DOCKER_REPO=`aws ecr describe-repositories --repository-names hellospringboot | grep repositoryUri | cut -d "\"" -f 4`
-    docker build --no-cache -t ${DOCKER_REPO}:1.0 .
-    docker push ${DOCKER_REPO}:1.0
-
-4)  Deploy Spring boot application On ECS:
-------------------------------------------
-
-    #!/usr/bin/env bash
-    export AWS_DEFAULT_REGION=us-west-2
-    dockerRepo=`aws ecr describe-repositories --repository-name hellospringboot --region us-west-2 | grep repositoryUri | cut -d "\"" -f 4`
-    dockerTag=`aws ecr list-images --repository-name hellospringboot --region us-west-2 | grep imageTag | head -n 1 | cut -d "\"" -f 4`
-    sed -e "s;DOCKER_IMAGE_NAME;${dockerRepo}:${dockerTag};g" ${WORKSPACE}/template.json > taskDefinition.json
-    aws ecs create-cluster --cluster-name test-cluster
-    aws ecs register-task-definition --family jenkins-test --cli-input-json file://taskDefinition.json --region us-west-2
-    revision=`aws ecs describe-task-definition --task-definition jenkins-test --region us-west-2 | grep "revision" | tr -s " " | cut -d " " -f 3`
-    aws ecs create-service --cluster test-cluster --service-name test-service --task-definition jenkins-test:${revision} --desired-count 1 --launch-type FARGATE --platform-version LATEST --network-configuration "awsvpcConfiguration={subnets=[subnet-8a1fdcf2],securityGroups=[sg-f9abbfaa],assignPublicIp=ENABLED}"
+        <server>
+            <id>nexus-snapshots</id>
+            <username>admin</username>
+            <password>admin123</password>
+          </server>
+        <server>
+            <id>nexus-releases</id>
+            <username>admin</username>
+            <password>admin123</password>
+          </server>
+        </servers>
+3. Run below command to run and deploy to nexus repository
     
+        mvn clean install
+        mvn deploy
+Now go and check whether artifact uploaded into nexus repository
+## Download artifacts from nexus repository
+Run shell script with run time variables
   
+    Run time variables are,
+      - groupid
+      - artifactid
+      - version
+    Optional parameters:
+      - classifier
+      - type
+Syntax:      
 
+    sh get_artifact_from_nexus.sh groupid artifactid version
+Command to Run:
+  
+    sh get_artifact_from_nexus.sh org.springframework gs-spring-boot 0.1.0
